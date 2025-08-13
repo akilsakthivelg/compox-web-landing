@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Compox - Landing Page</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      color: #333;
+    }
+    .container {
+      max-width: 400px;
+      background: white;
+      padding: 20px;
+      margin: 60px auto;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    input, button {
+      padding: 10px;
+      width: 100%;
+      margin: 8px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #28a745;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    .rules {
+      text-align: left;
+      font-size: 0.9em;
+      margin-top: 5px;
+    }
+    .valid { color: green; }
+    .invalid { color: red; }
+    .checkmark-wrapper { display: inline-block; width: 100px; height: 100px; margin-bottom: 20px; }
+    svg { width: 100px; height: 100px; }
+    .checkmark { fill: none; stroke: #28a745; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100; stroke-dashoffset: 100; animation: draw 3s ease-out forwards; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    .download-btn { display: inline-block; margin-top: 25px; padding: 12px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+    .download-btn:hover { background-color: #218838; }
+  </style>
+</head>
+<body>
+  <div class="container" id="message-container">
+    <h2>Processing...</h2>
+    <p>Please wait.</p>
+  </div>
+
+  <!-- Email verified message -->
+  <div class="container" id="verify-container" style="display:none;">
+    <div class="checkmark-wrapper">
+      <svg viewBox="0 0 52 52">
+        <path class="checkmark" d="M14 27 L22 35 L38 17" />
+      </svg>
+    </div>
+    <h1>Email Verified!</h1>
+    <p class="message" id="verify-status">Opening Compox...</p>
+    <a id="downloadLink" class="download-btn" href="#" style="display:none;">Download Compox</a>
+  </div>
+
+  <!-- Reset password form -->
+  <div class="container" id="reset-container" style="display:none;">
+    <h2>Reset Your Password</h2>
+    <form id="reset-form">
+      <input type="password" id="password" placeholder="New Password" required />
+      <div class="rules" id="password-rules">
+        <div id="rule-length" class="invalid">• At least 8 characters</div>
+        <div id="rule-upper" class="invalid">• At least 1 uppercase letter (A-Z)</div>
+        <div id="rule-lower" class="invalid">• At least 1 lowercase letter (a-z)</div>
+        <div id="rule-number" class="invalid">• At least 1 number (0-9)</div>
+        <div id="rule-special" class="invalid">• At least 1 special character (~`+=-_.?@$!%*#&)</div>
+      </div>
+      <button type="submit" id="update-btn" disabled>Update Password</button>
+    </form>
+    <p id="reset-status"></p>
+  </div>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://xsoanrrdybimemacaror.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzb2FucnJkeWJpbWVtYWNhcm9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYzNDg0OTQsImV4cCI6MjA2MTkyNDQ5NH0.GbdguCKb_UdXbtG4cAYqOCZV-ejjdL7YdRE7NHrb0vM";
+    const APP_DEEP_LINK_LOGIN = "compox://login-callback";
+    const APP_DEEP_LINK_RESET = "compox://reset-password";
+
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const passwordInput = document.getElementById("password");
+    const updateBtn = document.getElementById("update-btn");
+
+    // Password regex
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[~`+=\-_.?@$!%*#&]).{8,}$/;
+
+    passwordInput.addEventListener("input", () => {
+      const pwd = passwordInput.value;
+      const rules = {
+        length: pwd.length >= 8,
+        upper: /[A-Z]/.test(pwd),
+        lower: /[a-z]/.test(pwd),
+        number: /\d/.test(pwd),
+        special: /[~`+\=\-_.?@$!%*#&]/.test(pwd)
+      };
+      document.getElementById("rule-length").className = rules.length ? "valid" : "invalid";
+      document.getElementById("rule-upper").className = rules.upper ? "valid" : "invalid";
+      document.getElementById("rule-lower").className = rules.lower ? "valid" : "invalid";
+      document.getElementById("rule-number").className = rules.number ? "valid" : "invalid";
+      document.getElementById("rule-special").className = rules.special ? "valid" : "invalid";
+
+      updateBtn.disabled = !passwordRegex.test(pwd);
+    });
+
+    function tryOpenApp(deepLink, fallback) {
+      const now = Date.now();
+      let hiddenCheck;
+      function visibilityChange() { if (document.hidden) hiddenCheck = true; }
+      document.addEventListener("visibilitychange", visibilityChange);
+
+      window.location.href = deepLink;
+
+      setTimeout(() => {
+        document.removeEventListener("visibilitychange", visibilityChange);
+        if (!hiddenCheck) fallback();
+      }, 1500);
+    }
+
+    function getQueryParams() {
+      let params = new URLSearchParams(window.location.search);
+      if (!params.has('type')) {
+        params = new URLSearchParams(window.location.hash.substring(1));
+      }
+      return Object.fromEntries(params.entries());
+    }
+
+    async function handleEmailVerification(token) {
+      const { error } = await supabaseClient.auth.verifyOtp({ type: 'signup', token });
+      const container = document.getElementById("verify-container");
+      const status = document.getElementById("verify-status");
+      document.getElementById("message-container").style.display = "none";
+      container.style.display = "block";
+
+      if (error) {
+        status.innerText = `Error verifying email: ${error.message}`;
+        status.className = "error";
+      } else {
+        status.innerText = "Email verified! Opening Compox...";
+        tryOpenApp(APP_DEEP_LINK_LOGIN, () => {
+          status.innerText = "App not installed. You can download it below.";
+          const downloadLink = document.getElementById("downloadLink");
+          downloadLink.style.display = "inline-block";
+          downloadLink.href = /android/i.test(navigator.userAgent)
+            ? "https://play.google.com/store/apps/details?id=com.yourcompany.compox"
+            : /iPhone|iPad|iPod/i.test(navigator.userAgent)
+              ? "https://apps.apple.com/app/idYOUR_APP_ID"
+              : "https://compox.com";
+        });
+      }
+    }
+
+    async function handleResetPassword(access_token, refresh_token, exp) {
+      const nowSec = Math.floor(Date.now()/1000);
+      if (!access_token || (exp && nowSec > parseInt(exp))) {
+        document.getElementById("message-container").innerHTML = "<p class='error'>Invalid or expired link.</p>";
+        return;
+      }
+
+      const fallback = () => {
+        document.getElementById("message-container").style.display = "none";
+        document.getElementById("reset-container").style.display = "block";
+        supabaseClient.auth.setSession({ access_token, refresh_token: refresh_token || "" });
+      };
+
+      tryOpenApp(APP_DEEP_LINK_RESET, fallback);
+
+      document.getElementById("reset-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const password = passwordInput.value;
+        const status = document.getElementById("reset-status");
+        if (!passwordRegex.test(password)) {
+          status.innerText = "Password does not meet requirements.";
+          status.className = "error";
+          return;
+        }
+        const { error } = await supabaseClient.auth.updateUser({ password });
+        if (error) {
+          status.innerText = error.message;
+          status.className = "error";
+        } else {
+          status.innerText = "Password updated successfully!";
+          status.className = "success";
+        }
+      });
+    }
+
+    (function init() {
+      const params = getQueryParams();
+      if (params.type === 'verify' && params.token) {
+        handleEmailVerification(params.token);
+      } else if (params.type === 'reset' && params.access_token) {
+        handleResetPassword(params.access_token, params.refresh_token, params.exp);
+      } else {
+        document.getElementById("message-container").innerHTML = "<p class='error'>Invalid link or missing parameters.</p>";
+      }
+    })();
+  </script>
+</body>
+</html>
